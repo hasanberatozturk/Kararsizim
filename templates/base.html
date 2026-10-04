@@ -6,6 +6,8 @@
   <title>{% block title %}Kararsızım{% endblock %}</title>
 </head>
 <body>
+  {% include "partials/navbar.html" %}
+  {% include "partials/messages.html" %}
   <main>
     {% block content %}{% endblock %}
   </main>

@@ -461,7 +461,7 @@ Her faz kendi içinde çalışır durumda bitmeli. Bir fazı bitirmeden sonrakin
 ## 12. Durum
 
 - [x] Faz 1 — Proje iskeleti ve veri modeli
-- [ ] Faz 2 — Kimlik doğrulama
+- [x] Faz 2 — Kimlik doğrulama
 - [ ] Faz 3 — Anket oluşturma ve listeleme
 - [ ] Faz 4 — Oylama
 - [ ] Faz 5 — Arayüz cilası
