@@ -466,6 +466,7 @@ Her faz kendi içinde çalışır durumda bitmeli. Bir fazı bitirmeden sonrakin
 - [x] Faz 4 — Oylama
 - [x] Faz 5 — Arayüz cilası
 - [ ] Faz 6 — Supabase + Vercel ile yayına alma
+  - Kod, README ve `enable_rls` komutu hazır. Supabase projesi oluşturuldu (`kararsizim`, ref `vjbuhdlgmuirigiamxxx`, eu-central-1). Bekleyen: migrate + RLS + createsuperuser (veritabanı parolası gerekli), Vercel deploy.
 
 ---
 
