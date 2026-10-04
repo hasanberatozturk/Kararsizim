@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}@{{ profile.username }} · Kararsızım{% endblock %}
+
+{% block content %}
+  <h1>@{{ profile.username }} kullanıcısının anketleri</h1>
+
+  {% for poll in page_obj %}
+    {% include "partials/poll_card.html" %}
+  {% empty %}
+    <div class="empty-state"><p>Bu kullanıcının henüz anketi yok.</p></div>
+  {% endfor %}
+
+  {% include "partials/pagination.html" %}
+{% endblock %}

@@ -1,5 +1,24 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <h1>Kararsızım çalışıyor</h1>
+  <section class="hero">
+    <h1>Kararsız mı kaldın? Bir sor, herkes oylasın.</h1>
+    <a class="btn btn-gradient" href="{% url 'polls:create' %}">Anket Oluştur</a>
+  </section>
+
+  <div class="sort-tabs">
+    <a href="{% url 'polls:list' %}" {% if sort == 'yeni' %}aria-current="page"{% endif %}>En yeni</a>
+    <a href="{% url 'polls:list' %}?sirala=populer" {% if sort == 'populer' %}aria-current="page"{% endif %}>En popüler</a>
+  </div>
+
+  {% for poll in page_obj %}
+    {% include "partials/poll_card.html" %}
+  {% empty %}
+    <div class="empty-state">
+      <p>Henüz hiç anket yok. İlk kararsız sen ol! 🤔</p>
+      <a class="btn btn-gradient" href="{% url 'polls:create' %}">Anket Oluştur</a>
+    </div>
+  {% endfor %}
+
+  {% include "partials/pagination.html" %}
 {% endblock %}

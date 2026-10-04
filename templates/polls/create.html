@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Anket Oluştur · Kararsızım{% endblock %}
+
+{% block content %}
+  <h1>Yeni Anket</h1>
+  <form method="post" id="poll-form" data-min="{{ min_options }}" data-max="{{ max_options }}" novalidate>
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="form-errors" role="alert">
+        {% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}
+      </div>
+    {% endif %}
+    {% for field in form %}
+      <div class="form-field">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+        {{ field }}
+        {% for error in field.errors %}<p class="field-error" role="alert">{{ error }}</p>{% endfor %}
+      </div>
+    {% endfor %}
+
+    <fieldset class="options-fieldset">
+      <legend>Seçenekler <span id="option-count">{{ option_values|length }} / {{ max_options }}</span></legend>
+      <div id="options-list">
+        {% for value in option_values %}
+          <div class="option-row">
+            <input type="text" name="options" value="{{ value }}" maxlength="100"
+                   aria-label="Seçenek {{ forloop.counter }}" placeholder="Seçenek {{ forloop.counter }}">
+            <button type="button" class="btn btn-ghost remove-option" aria-label="Seçeneği kaldır">✕</button>
+          </div>
+        {% endfor %}
+      </div>
+      <button type="button" id="add-option" class="btn btn-ghost">＋ Seçenek ekle</button>
+    </fieldset>
+
+    <button type="submit" class="btn btn-gradient">Yayınla</button>
+  </form>
+  <script src="{% static 'js/poll_form.js' %}"></script>
+{% endblock %}

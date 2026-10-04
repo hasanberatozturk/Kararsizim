@@ -1,0 +1,21 @@
+<article class="poll-card" id="poll-{{ poll.pk }}">
+  <h2 class="poll-question"><a href="{% url 'polls:detail' poll.pk %}">{{ poll.question }}</a></h2>
+  <p class="poll-meta">
+    <a href="{% url 'polls:user_polls' poll.author.username %}">@{{ poll.author.username }}</a>
+    · {{ poll.created_at|timesince }} önce
+  </p>
+  {% if poll.description %}<p class="poll-description">{{ poll.description }}</p>{% endif %}
+  <ul class="poll-options">
+    {% for option in poll.options.all %}
+      <li class="option option-{{ option.order }}">{{ option.text }}</li>
+    {% endfor %}
+  </ul>
+  <p class="poll-total">{{ poll.total_votes }} oy</p>
+  {% if user.is_authenticated and user.pk == poll.author_id %}
+    <form method="post" action="{% url 'polls:delete' poll.pk %}" class="inline-form"
+          onsubmit="return confirm('Bu anketi silmek istediğine emin misin?');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger">Sil</button>
+    </form>
+  {% endif %}
+</article>
