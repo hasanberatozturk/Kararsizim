@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Erişim yok · Kararsızım{% endblock %}
+
+{% block content %}
+  <section class="error-page">
+    <p class="emoji">✋</p>
+    <h1>Bu işlem için yetkin yok</h1>
+    <a class="btn btn-gradient" href="{% url 'polls:list' %}">Ana sayfaya dön</a>
+  </section>
+{% endblock %}

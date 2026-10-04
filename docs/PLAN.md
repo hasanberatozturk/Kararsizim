@@ -464,7 +464,7 @@ Her faz kendi içinde çalışır durumda bitmeli. Bir fazı bitirmeden sonrakin
 - [x] Faz 2 — Kimlik doğrulama
 - [x] Faz 3 — Anket oluşturma ve listeleme
 - [x] Faz 4 — Oylama
-- [ ] Faz 5 — Arayüz cilası
+- [x] Faz 5 — Arayüz cilası
 - [ ] Faz 6 — Supabase + Vercel ile yayına alma
 
 ---

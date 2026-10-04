@@ -346,3 +346,30 @@ class VoteViewTests(TestCase):
         self.vote_json(self.client, self.opt1.pk)
         with self.assertNumQueries(4):  # count + polls + options prefetch + viewer's votes
             self.client.get("/")
+
+
+class ErrorPageTests(TestCase):
+    def test_custom_404_page(self):
+        response = self.client.get("/anket/9999/")
+        self.assertContains(response, "Aradığın sayfa bulunamadı", status_code=404)
+
+    def test_custom_403_page(self):
+        author = User.objects.create_user(email="ali@example.com", username="ali", password=PASSWORD)
+        other = User.objects.create_user(email="v@example.com", username="veli", password=PASSWORD)
+        poll = make_poll(author)
+        self.client.force_login(other)
+        response = self.client.post(f"/anket/{poll.pk}/sil/")
+        self.assertContains(response, "yetkin yok", status_code=403)
+
+    def test_500_template_is_standalone(self):
+        from django.template.loader import render_to_string
+
+        self.assertIn("Bir şeyler ters gitti", render_to_string("500.html"))
+
+
+class PageMetaTests(TestCase):
+    def test_base_has_title_description_favicon(self):
+        response = self.client.get("/")
+        self.assertContains(response, 'name="description"')
+        self.assertContains(response, "favicon.svg")
+        self.assertContains(response, "Plus+Jakarta+Sans")

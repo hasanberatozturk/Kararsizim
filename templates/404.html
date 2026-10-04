@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Sayfa bulunamadı · Kararsızım{% endblock %}
+
+{% block content %}
+  <section class="error-page">
+    <p class="emoji">🤷</p>
+    <h1>Aradığın sayfa bulunamadı</h1>
+    <p>Link yanlış olabilir ya da anket silinmiş olabilir.</p>
+    <a class="btn btn-gradient" href="{% url 'polls:list' %}">Ana sayfaya dön</a>
+  </section>
+{% endblock %}
