@@ -463,7 +463,7 @@ Her faz kendi içinde çalışır durumda bitmeli. Bir fazı bitirmeden sonrakin
 - [x] Faz 1 — Proje iskeleti ve veri modeli
 - [x] Faz 2 — Kimlik doğrulama
 - [x] Faz 3 — Anket oluşturma ve listeleme
-- [ ] Faz 4 — Oylama
+- [x] Faz 4 — Oylama
 - [ ] Faz 5 — Arayüz cilası
 - [ ] Faz 6 — Supabase + Vercel ile yayına alma
 

@@ -1,6 +1,8 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import Client, TestCase
 from django.urls import reverse
 
 from .models import Option, Poll, Vote
@@ -190,3 +192,157 @@ class PollDeleteTests(TestCase):
         self.assertNotContains(self.client.get("/"), "/sil/")
         self.client.force_login(self.author)
         self.assertContains(self.client.get("/"), "/sil/")
+
+
+class VoteViewTests(TestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(email="ali@example.com", username="ali", password=PASSWORD)
+        self.poll = make_poll(self.author)
+        self.opt1, self.opt2 = self.poll.options.all()
+        self.url = f"/anket/{self.poll.pk}/oy/"
+
+    def vote_json(self, client, option_id, poll_url=None):
+        return client.post(
+            poll_url or self.url,
+            {"option_id": option_id},
+            headers={"Accept": "application/json"},
+        )
+
+    def test_anonymous_can_vote_and_gets_contract_response(self):
+        response = self.vote_json(self.client, self.opt1.pk)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["voted_option_id"], self.opt1.pk)
+        self.assertEqual(data["total_votes"], 1)
+        self.assertEqual(
+            data["results"],
+            [
+                {"id": self.opt1.pk, "text": "Sinema", "votes": 1, "percent": 100},
+                {"id": self.opt2.pk, "text": "Restoran", "votes": 0, "percent": 0},
+            ],
+        )
+        vote = Vote.objects.get()
+        self.assertTrue(vote.voter_key.startswith("a:"))
+        self.assertIsNone(vote.user)
+
+    def test_voter_cookie_is_signed_httponly(self):
+        response = self.vote_json(self.client, self.opt1.pk)
+        cookie = response.cookies["kararsizim_voter"]
+        self.assertTrue(cookie["httponly"])
+        self.assertEqual(cookie["samesite"], "Lax")
+        self.assertEqual(int(cookie["max-age"]), 60 * 60 * 24 * 365)
+        self.assertIn(":", cookie.value)  # signed value: <uuid>:<timestamp>:<sig>
+
+    def test_anonymous_sees_results_after_reload_and_cannot_revote(self):
+        self.vote_json(self.client, self.opt1.pk)
+        page = self.client.get(self.poll.get_absolute_url())
+        self.assertContains(page, "poll-results")
+        self.assertContains(page, "✓")
+        self.assertNotContains(page, "vote-form")
+        self.assertContains(self.client.get("/"), "poll-results")
+
+        response = self.vote_json(self.client, self.opt2.pk)
+        self.assertEqual(response.status_code, 409)
+        self.assertFalse(response.json()["ok"])
+        self.assertEqual(response.json()["voted_option_id"], self.opt1.pk)
+        self.assertEqual(Vote.objects.count(), 1)
+
+    def test_visitor_without_cookie_sees_buttons(self):
+        self.assertContains(self.client.get("/"), "vote-form")
+
+    def test_tampered_cookie_is_ignored(self):
+        self.client.cookies["kararsizim_voter"] = "deadbeef:forged:signature"
+        self.vote_json(self.client, self.opt1.pk)
+        self.assertNotIn("deadbeef", Vote.objects.get().voter_key)
+
+    def test_member_vote_uses_user_key_and_blocks_other_browser(self):
+        member = User.objects.create_user(email="v@example.com", username="veli", password=PASSWORD)
+        first, second = Client(), Client()
+        first.force_login(member)
+        second.force_login(member)
+        self.assertEqual(self.vote_json(first, self.opt1.pk).status_code, 200)
+        vote = Vote.objects.get()
+        self.assertEqual(vote.voter_key, f"u:{member.pk}")
+        self.assertEqual(vote.user, member)
+        self.assertEqual(self.vote_json(second, self.opt2.pk).status_code, 409)
+        self.assertContains(second.get("/"), "poll-results")
+
+    def test_owner_can_vote_on_own_poll(self):
+        self.client.force_login(self.author)
+        self.assertEqual(self.vote_json(self.client, self.opt1.pk).status_code, 200)
+
+    def test_option_from_other_poll_rejected(self):
+        other = make_poll(self.author, question="Başka bir anket")
+        response = self.vote_json(self.client, other.options.first().pk)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Vote.objects.count(), 0)
+
+    def test_invalid_option_rejected(self):
+        for value in ("abc", "", "99999"):
+            self.assertEqual(self.vote_json(self.client, value).status_code, 400)
+
+    def test_inactive_poll_returns_403(self):
+        Poll.objects.filter(pk=self.poll.pk).update(is_active=False)
+        response = self.vote_json(self.client, self.opt1.pk)
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Vote.objects.count(), 0)
+
+    def test_json_body_accepted(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"option_id": self.opt2.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Vote.objects.get().option, self.opt2)
+
+    def test_get_not_allowed(self):
+        self.assertEqual(self.client.get(self.url).status_code, 405)
+
+    def test_csrf_enforced(self):
+        client = Client(enforce_csrf_checks=True)
+        response = client.post(self.url, {"option_id": self.opt1.pk})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Vote.objects.count(), 0)
+
+    def test_csrf_accepted_with_token_header(self):
+        client = Client(enforce_csrf_checks=True)
+        page = client.get("/")
+        token = page.cookies["csrftoken"].value
+        response = client.post(
+            self.url,
+            {"option_id": self.opt1.pk},
+            headers={"X-CSRFToken": token, "Accept": "application/json"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_non_js_form_post_redirects_and_shows_results(self):
+        response = self.client.post(self.url, {"option_id": self.opt1.pk, "next": "/"}, follow=True)
+        self.assertRedirects(response, "/")
+        self.assertContains(response, "poll-results")
+        self.assertEqual(Vote.objects.count(), 1)
+
+    def test_non_js_double_vote_shows_error_message(self):
+        self.client.post(self.url, {"option_id": self.opt1.pk})
+        response = self.client.post(self.url, {"option_id": self.opt2.pk}, follow=True)
+        self.assertContains(response, "zaten oy verdin")
+        self.assertEqual(Vote.objects.count(), 1)
+
+    def test_open_redirect_is_blocked(self):
+        response = self.client.post(self.url, {"option_id": self.opt1.pk, "next": "https://evil.example/"})
+        self.assertRedirects(response, self.poll.get_absolute_url(), fetch_redirect_response=False)
+
+    def test_percentages_sum_to_about_100(self):
+        for i, option in enumerate([self.opt1, self.opt1, self.opt2]):
+            Vote.objects.create(poll=self.poll, option=option, voter_key=f"a:{i}")
+        data = self.vote_json(self.client, self.opt2.pk).json()
+        self.assertEqual(data["total_votes"], 4)
+        self.assertEqual(sum(r["percent"] for r in data["results"]), 100)
+
+    def test_voted_state_uses_constant_queries(self):
+        for i in range(5):
+            make_poll(self.author, question=f"Soru numarası {i}")
+        self.vote_json(self.client, self.opt1.pk)
+        with self.assertNumQueries(4):  # count + polls + options prefetch + viewer's votes
+            self.client.get("/")

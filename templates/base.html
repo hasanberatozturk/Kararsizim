@@ -1,4 +1,4 @@
-<!doctype html>
+{% load static %}<!doctype html>
 <html lang="tr">
 <head>
   <meta charset="utf-8">
@@ -11,5 +11,6 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script src="{% static 'js/vote.js' %}" defer></script>
 </body>
 </html>

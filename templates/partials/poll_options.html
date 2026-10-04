@@ -1,0 +1,27 @@
+{% if poll.voted_option_id %}
+  <ul class="poll-results">
+    {% for result in poll.results %}
+      <li class="result option-{{ result.order }}{% if result.is_mine %} is-mine{% endif %}">
+        <div class="result-head">
+          <span class="result-text">{{ result.text }}{% if result.is_mine %} <span class="check" title="Senin oyun">✓</span>{% endif %}</span>
+          <span class="result-figures">%{{ result.percent }} · {{ result.votes }} oy</span>
+        </div>
+        <div class="result-track"><div class="result-bar" style="--percent: {{ result.percent }}%"></div></div>
+      </li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <form method="post" action="{% url 'polls:vote' poll.pk %}" class="vote-form">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <ul class="poll-options">
+      {% for result in poll.results %}
+        <li>
+          <button type="submit" name="option_id" value="{{ result.id }}" class="option option-{{ result.order }}">{{ result.text }}</button>
+        </li>
+      {% endfor %}
+    </ul>
+  </form>
+{% endif %}
+<p class="poll-total">{{ poll.total_votes }} oy</p>
+<p class="vote-error" role="alert" hidden></p>
