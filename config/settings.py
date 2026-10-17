@@ -6,6 +6,7 @@ All environment-specific values are read from environment variables
 """
 
 import os
+import re
 from pathlib import Path
 
 import dj_database_url
@@ -90,8 +91,33 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # DATABASE_URL set → PostgreSQL (Supabase); otherwise local SQLite.
 
+def describe_bad_database_url(url):
+    """Explain what looks wrong with DATABASE_URL without echoing it (it contains the password)."""
+    problems = []
+    if not url.startswith(("postgresql://", "postgres://")):
+        problems.append("postgresql:// ile başlamıyor")
+    if "[" in url or "]" in url:
+        problems.append("köşeli parantez [ ] içeriyor (parolayı yazarken silinmeli)")
+    if any(char.isspace() for char in url):
+        problems.append("boşluk ya da satır sonu içeriyor")
+    if '"' in url or "'" in url:
+        problems.append("tırnak işareti içeriyor")
+    if url.count("@") != 1:
+        problems.append(f"'@' sayısı {url.count('@')} (1 olmalı; parolada @ varsa %40 yazılmalı)")
+    if not re.search(r":\d+/[^/]*$", url):
+        problems.append("host'tan sonra ':port/veritabani' biçimi bulunamadı")
+    if len(re.findall(r"[#?]", url.split("@")[0])):
+        problems.append("parola kısmında # veya ? var (URL kodlaması gerekir)")
+    return "; ".join(problems) or "belirgin bir biçim hatası bulunamadı (parolada özel karakter olabilir)"
+
+
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
-DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=0)}
+try:
+    DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=0)}
+except dj_database_url.ParseError:
+    raise ImproperlyConfigured(
+        f"DATABASE_URL geçersiz ({len(DATABASE_URL)} karakter): {describe_bad_database_url(DATABASE_URL)}."
+    ) from None
 if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
     # Supabase transaction pooler: no server-side cursors, no persistent connections,
     # and no prepared statements (psycopg 3 would otherwise prepare after 5 executions).
