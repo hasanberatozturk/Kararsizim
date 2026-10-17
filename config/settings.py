@@ -93,9 +93,11 @@ WSGI_APPLICATION = "config.wsgi.application"
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
 DATABASES = {"default": dj_database_url.parse(DATABASE_URL, conn_max_age=0)}
 if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
-    # Supabase transaction pooler: no server-side cursors, no persistent connections.
+    # Supabase transaction pooler: no server-side cursors, no persistent connections,
+    # and no prepared statements (psycopg 3 would otherwise prepare after 5 executions).
     DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
     DATABASES["default"]["CONN_MAX_AGE"] = 0
+    DATABASES["default"].setdefault("OPTIONS", {})["prepare_threshold"] = None
 
 
 # Authentication
