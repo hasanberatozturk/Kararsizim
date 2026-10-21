@@ -115,3 +115,59 @@ class LoginLogoutTests(TestCase):
         response = self.client.post(reverse("accounts:logout"))
         self.assertRedirects(response, reverse("polls:list"))
         self.assertNotIn("_auth_user_id", self.client.session)
+
+
+class LoginLockoutTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="ali@example.com", username="ali", password=PASSWORD)
+        self.url = reverse("accounts:login")
+
+    def attempt(self, email, password, ip="203.0.113.7"):
+        return self.client.post(
+            self.url,
+            {"username": email, "password": password},
+            headers={"X-Vercel-Forwarded-For": ip},
+        )
+
+    def test_locks_out_after_five_failures_even_with_correct_password(self):
+        for _ in range(5):
+            self.assertEqual(self.attempt("ali@example.com", "yanlis").status_code, 200)
+        locked = self.attempt("ali@example.com", PASSWORD)
+        self.assertEqual(locked.status_code, 429)
+        self.assertContains(locked, "Çok fazla başarısız giriş", status_code=429)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_email_case_does_not_reset_the_counter(self):
+        for email in ["ali@example.com", "ALI@example.com", "Ali@Example.com", "ali@example.com", "ALI@EXAMPLE.COM"]:
+            self.attempt(email, "yanlis")
+        self.assertEqual(self.attempt("aLi@example.com", PASSWORD).status_code, 429)
+
+    def test_other_ip_can_still_log_in(self):
+        for _ in range(5):
+            self.attempt("ali@example.com", "yanlis")
+        response = self.attempt("ali@example.com", PASSWORD, ip="198.51.100.9")
+        self.assertEqual(response.status_code, 302)
+
+    def test_success_resets_failure_count(self):
+        for _ in range(4):
+            self.attempt("ali@example.com", "yanlis")
+        self.assertEqual(self.attempt("ali@example.com", PASSWORD).status_code, 302)
+        self.client.logout()
+        for _ in range(4):
+            self.attempt("ali@example.com", "yanlis")
+        self.assertEqual(self.attempt("ali@example.com", PASSWORD).status_code, 302)
+
+    def test_admin_login_is_protected_too(self):
+        User.objects.create_superuser(email="root@example.com", username="root", password=PASSWORD)
+        for _ in range(5):
+            self.client.post(
+                "/admin/login/",
+                {"username": "root@example.com", "password": "yanlis"},
+                headers={"X-Vercel-Forwarded-For": "203.0.113.7"},
+            )
+        response = self.client.post(
+            "/admin/login/",
+            {"username": "root@example.com", "password": PASSWORD},
+            headers={"X-Vercel-Forwarded-For": "203.0.113.7"},
+        )
+        self.assertEqual(response.status_code, 429)

@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 
 from .forms import PollForm
 from .models import MAX_OPTIONS, MIN_OPTIONS, Option, Poll, Vote
-from .utils import decorate_polls, get_voter_key, set_voter_cookie
+from .utils import decorate_polls, get_ip_hash, get_voter_key, set_voter_cookie, too_many_votes
 
 User = get_user_model()
 
@@ -26,7 +26,13 @@ def poll_queryset():
     """Polls with author, options (with vote counts) and totals loaded without N+1 queries."""
     return (
         Poll.objects.select_related("author")
-        .prefetch_related(Prefetch("options", queryset=Option.objects.annotate(vote_count=Count("votes"))))
+        .prefetch_related(
+            Prefetch(
+                "options",
+                # annotate() drops Meta.ordering, so the option order must be explicit.
+                queryset=Option.objects.annotate(vote_count=Count("votes")).order_by("order", "id"),
+            )
+        )
         .annotate(total_votes=Count("votes", distinct=True))
         .order_by("-created_at", "-id")  # annotate() drops Meta.ordering
     )
@@ -86,13 +92,16 @@ def read_option_id(request):
 def poll_vote(request, pk):
     poll = get_object_or_404(Poll, pk=pk)
     voter_key = get_voter_key(request)
-    status, error, voted_option_id = 200, None, None
+    ip_hash = get_ip_hash(request)
+    status, error = 200, None
 
     option_id = read_option_id(request)
     if not poll.is_active:
         status, error = 403, "Bu anket artık oy kabul etmiyor."
     elif option_id is None or not Option.objects.filter(pk=option_id, poll=poll).exists():
         status, error = 400, "Geçersiz seçenek."
+    elif too_many_votes(poll, ip_hash):
+        status, error = 429, "Bu bağlantıdan çok fazla oy gönderildi. Biraz sonra tekrar dene."
     else:
         try:
             with transaction.atomic():
@@ -101,6 +110,7 @@ def poll_vote(request, pk):
                     option_id=option_id,
                     user=request.user if request.user.is_authenticated else None,
                     voter_key=voter_key,
+                    ip_hash=ip_hash,
                 )
         except IntegrityError:
             # The unique (poll, voter_key) constraint is the source of truth for double votes.
@@ -125,7 +135,7 @@ def poll_detail_url(pk):
 
 
 def vote_json_response(request, pk, voter_key, status, error):
-    if status in (400, 403) and not Vote.objects.filter(poll_id=pk, voter_key=voter_key).exists():
+    if status not in (200, 409) and not Vote.objects.filter(poll_id=pk, voter_key=voter_key).exists():
         # No results are revealed to someone who hasn't voted.
         return JsonResponse({"ok": False, "error": error}, status=status)
 

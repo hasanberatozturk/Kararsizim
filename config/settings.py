@@ -7,6 +7,7 @@ All environment-specific values are read from environment variables
 
 import os
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import dj_database_url
@@ -53,6 +54,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.humanize",
+    "axes",
     "accounts",
     "polls",
 ]
@@ -66,6 +68,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "axes.middleware.AxesMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -124,6 +127,9 @@ if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
     DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
     DATABASES["default"]["CONN_MAX_AGE"] = 0
     DATABASES["default"].setdefault("OPTIONS", {})["prepare_threshold"] = None
+    if DATABASES["default"].get("HOST") not in ("", "localhost", "127.0.0.1", None):
+        # Never fall back to an unencrypted connection to a remote database.
+        DATABASES["default"]["OPTIONS"].setdefault("sslmode", "require")
 
 
 # Authentication
@@ -136,6 +142,21 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+
+AUTHENTICATION_BACKENDS = [
+    "axes.backends.AxesStandaloneBackend",  # must come first: blocks locked-out logins
+    "django.contrib.auth.backends.ModelBackend",
+]
+
+# Brute-force protection for /giris/ and /admin/login/ (django-axes, state kept in the database).
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = timedelta(minutes=15)
+AXES_LOCKOUT_PARAMETERS = [["ip_address", "username"]]
+AXES_RESET_ON_SUCCESS = True
+AXES_USERNAME_CALLABLE = "accounts.utils.axes_username"
+AXES_IPWARE_META_PRECEDENCE_ORDER = ("HTTP_X_VERCEL_FORWARDED_FOR", "REMOTE_ADDR")
+AXES_HTTP_RESPONSE_CODE = 429
+AXES_LOCKOUT_TEMPLATE = "accounts/lockout.html"
 
 LOGIN_URL = "accounts:login"
 LOGIN_REDIRECT_URL = "polls:list"
@@ -176,6 +197,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 VOTER_COOKIE_NAME = "kararsizim_voter"
 VOTER_COOKIE_MAX_AGE = 60 * 60 * 24 * 365
+
+# At most this many votes per poll from one IP (hashed) within the window.
+VOTE_RATE_LIMIT = 20
+VOTE_RATE_WINDOW = 60 * 60
 
 
 # Production security

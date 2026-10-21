@@ -288,7 +288,8 @@ DJANGO_SECRET_KEY=degistir-beni
 DJANGO_DEBUG=True
 DJANGO_ALLOWED_HOSTS=localhost,127.0.0.1,.vercel.app
 DATABASE_URL=                # boşsa SQLite kullanılır
-CSRF_TRUSTED_ORIGINS=https://*.vercel.app
+# Joker (*) kullanma; projenin tam adresini yaz
+CSRF_TRUSTED_ORIGINS=https://proje-adiniz.vercel.app
 ```
 
 - `.env` dosyası **asla** commit edilmez (`.gitignore`'a ekle).

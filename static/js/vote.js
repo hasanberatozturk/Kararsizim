@@ -30,7 +30,11 @@
       body: payload,
     })
       .then(function (response) {
-        return response.json().then(function (data) { return { status: response.status, data: data }; });
+        // A CSRF rejection or server error returns an HTML page, not JSON.
+        return response.json().then(
+          function (data) { return { status: response.status, data: data }; },
+          function () { throw new Error("Oy gönderilemedi. Sayfayı yenileyip tekrar dene."); }
+        );
       })
       .then(function (result) {
         if (result.data.html) {

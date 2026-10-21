@@ -65,11 +65,13 @@ class Vote(models.Model):
         verbose_name="kullanıcı",
     )
     voter_key = models.CharField("oy veren anahtarı", max_length=64)
+    ip_hash = models.CharField("IP özeti", max_length=32, blank=True, default="")
     created_at = models.DateTimeField("oluşturulma", auto_now_add=True)
 
     class Meta:
         verbose_name = "oy"
         verbose_name_plural = "oylar"
+        indexes = [models.Index(fields=["poll", "ip_hash", "created_at"], name="polls_vote_ip_rate_idx")]
         constraints = [
             models.UniqueConstraint(
                 fields=["poll", "voter_key"],

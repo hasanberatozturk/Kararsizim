@@ -1,8 +1,10 @@
 import json
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.test import Client, TestCase
+from django.test import Client, TestCase, override_settings
+from django.utils import timezone
 from django.urls import reverse
 
 from .models import Option, Poll, Vote
@@ -373,3 +375,85 @@ class PageMetaTests(TestCase):
         self.assertContains(response, 'name="description"')
         self.assertContains(response, "favicon.svg")
         self.assertContains(response, "Plus+Jakarta+Sans")
+
+
+class OptionOrderTests(TestCase):
+    def test_options_follow_order_field_not_creation_order(self):
+        author = User.objects.create_user(email="ali@example.com", username="ali", password=PASSWORD)
+        poll = Poll.objects.create(author=author, question="Sıralama testi sorusu")
+        for text, order in [("Üçüncü", 2), ("Birinci", 0), ("İkinci", 1)]:
+            Option.objects.create(poll=poll, text=text, order=order)
+        Vote.objects.create(poll=poll, option=Option.objects.get(text="Üçüncü"), voter_key="a:1")
+        listed = self.client.get("/").context["page_obj"][0]
+        self.assertEqual([o.text for o in listed.options.all()], ["Birinci", "İkinci", "Üçüncü"])
+        self.assertEqual([r["text"] for r in listed.results], ["Birinci", "İkinci", "Üçüncü"])
+
+
+class PercentageTests(TestCase):
+    def test_always_sums_to_100(self):
+        from .utils import percentages
+
+        self.assertEqual(percentages([1, 1, 1]), [34, 33, 33])
+        self.assertEqual(sum(percentages([1, 1, 1])), 100)
+        self.assertEqual(percentages([1, 7]), [13, 87])  # 12.5 rounds up, not to the even neighbour
+        self.assertEqual(percentages([0, 0, 0]), [0, 0, 0])
+        self.assertEqual(percentages([5]), [100])
+        for votes in ([3, 3, 3, 3, 3], [1, 2, 4, 8, 16], [7, 11, 13]):
+            self.assertEqual(sum(percentages(votes)), 100)
+
+
+@override_settings(VOTE_RATE_LIMIT=3)
+class VoteRateLimitTests(TestCase):
+    def setUp(self):
+        self.author = User.objects.create_user(email="ali@example.com", username="ali", password=PASSWORD)
+        self.poll = make_poll(self.author)
+        self.opt = self.poll.options.first()
+        self.url = f"/anket/{self.poll.pk}/oy/"
+
+    def vote_from_new_browser(self, ip="203.0.113.7"):
+        # A fresh Client has no voter cookie: every call looks like a new voter.
+        return Client().post(
+            self.url,
+            {"option_id": self.opt.pk},
+            headers={"Accept": "application/json", "X-Vercel-Forwarded-For": ip},
+        )
+
+    def test_same_ip_is_limited_even_without_cookies(self):
+        statuses = [self.vote_from_new_browser().status_code for _ in range(5)]
+        self.assertEqual(statuses, [200, 200, 200, 429, 429])
+        self.assertEqual(Vote.objects.count(), 3)
+
+    def test_other_ip_is_not_affected(self):
+        for _ in range(4):
+            self.vote_from_new_browser("203.0.113.7")
+        self.assertEqual(self.vote_from_new_browser("198.51.100.9").status_code, 200)
+
+    def test_limit_is_per_poll(self):
+        other = make_poll(self.author, question="Başka bir anket")
+        for _ in range(3):
+            self.vote_from_new_browser()
+        response = Client().post(
+            f"/anket/{other.pk}/oy/",
+            {"option_id": other.options.first().pk},
+            headers={"Accept": "application/json", "X-Vercel-Forwarded-For": "203.0.113.7"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_429_does_not_reveal_results_to_non_voters(self):
+        for _ in range(3):
+            self.vote_from_new_browser()
+        response = self.vote_from_new_browser()
+        self.assertEqual(response.status_code, 429)
+        self.assertEqual(set(response.json()), {"ok", "error"})
+
+    def test_ip_is_stored_hashed_only(self):
+        self.vote_from_new_browser("203.0.113.7")
+        stored = Vote.objects.get().ip_hash
+        self.assertEqual(len(stored), 32)
+        self.assertNotIn("203.0.113.7", stored)
+
+    def test_old_votes_outside_window_do_not_count(self):
+        for _ in range(3):
+            self.vote_from_new_browser()
+        Vote.objects.update(created_at=timezone.now() - timedelta(hours=2))
+        self.assertEqual(self.vote_from_new_browser().status_code, 200)

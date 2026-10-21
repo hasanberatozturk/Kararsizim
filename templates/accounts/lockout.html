@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Çok fazla deneme · Kararsızım{% endblock %}
+
+{% block content %}
+  <section class="error-page">
+    <p class="emoji">⏳</p>
+    <h1>Çok fazla başarısız giriş denemesi</h1>
+    <p>Güvenlik nedeniyle giriş geçici olarak kilitlendi. 15 dakika sonra tekrar dene.</p>
+    <a class="btn btn-gradient" href="{% url 'polls:list' %}">Ana sayfaya dön</a>
+  </section>
+{% endblock %}
