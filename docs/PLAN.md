@@ -301,7 +301,8 @@ CSRF_TRUSTED_ORIGINS=https://*.vercel.app
 ## 9. Supabase ve Vercel Notları
 
 ### Supabase bağlantısı
-- Uygulama (Vercel, sunucusuz) için **Transaction pooler** bağlantı dizesini kullan (port **6543**). Sunucusuz ortamlar için önerilen mod budur.
+- Uygulama (Vercel, sunucusuz) için **Transaction pooler** bağlantı dizesini kullan (port **6543**). Sunucusuz ortamlar için önerilen mod budur. Dizenin sonuna `?sslmode=require` ekle; parola köşeli parantez içermemeli ve özel karakterleri URL kodlu olmalı.
+- Transaction modunda prepared statement da desteklenmez; `psycopg` 3 bunları 5. sorgudan sonra kendiliğinden kullandığı için `settings.py` içinde `OPTIONS["prepare_threshold"] = None` ayarlanır.
 - Transaction modunda prepared statement desteklenmez ve sunucu tarafı cursor'lar çalışmaz. Bu yüzden Django ayarlarında:
   ```python
   DATABASES["default"]["DISABLE_SERVER_SIDE_CURSORS"] = True
@@ -325,7 +326,9 @@ CSRF_TRUSTED_ORIGINS=https://*.vercel.app
 ### Vercel
 - Vercel, kökteki `manage.py` dosyasından Django projesini otomatik algılar; `vercel.json` ile yönlendirme veya `/api` klasörü gerekmez.
 - Statik dosyalar Vercel CDN'den sunulur. `STATIC_ROOT` tanımlı olmalı; `collectstatic` build sırasında çalışmalı. Kurulum sırasında **Vercel'in güncel Django dokümantasyonunu kontrol et** (https://vercel.com/docs/frameworks/full-stack/django) ve gerekirse `pyproject.toml` içinde `[tool.vercel]` ayarlarını kullan.
-- Vercel ortam değişkenlerine `.env.example`'daki tüm anahtarları ekle (`DJANGO_DEBUG=False`, `DATABASE_URL` = transaction pooler).
+- Vercel ortam değişkenlerine `.env.example`'daki tüm anahtarları ekle (`DJANGO_DEBUG=False`, `DATABASE_URL` = transaction pooler). Hepsini **deploy'dan önce** ve yalnızca Production ortamına gir: Vercel build sırasında `manage.py` ile ayarları yükler, eksik `DJANGO_SECRET_KEY` build'i kırar. Değişkenleri sonradan değiştirirsen Redeploy gerekir.
+- `CSRF_TRUSTED_ORIGINS` için joker (`https://*.vercel.app`) yerine projenin tam adresini kullan (`https://<proje-adi>.vercel.app`).
+- Fonksiyon bölgesi `vercel.json` ile `fra1` (Supabase ile aynı bölge) olarak ayarlanır; varsayılan `iad1` her sorguda Atlantik'i geçerdi.
 - Vercel fonksiyonları kalıcı disk sunmaz: SQLite production'da **kullanılmaz**, kullanıcı dosya yüklemesi prototipte yok.
 
 ---
@@ -466,7 +469,9 @@ Her faz kendi içinde çalışır durumda bitmeli. Bir fazı bitirmeden sonrakin
 - [x] Faz 4 — Oylama
 - [x] Faz 5 — Arayüz cilası
 - [ ] Faz 6 — Supabase + Vercel ile yayına alma
-  - Kod, README ve `enable_rls` komutu hazır. Supabase projesi oluşturuldu (`kararsizim`, ref `vjbuhdlgmuirigiamxxx`, eu-central-1). Bekleyen: migrate + RLS + createsuperuser (veritabanı parolası gerekli), Vercel deploy.
+  - Hazır: production ayarları, `vercel.json` (`fra1`), `enable_rls` ve `seed_polls` komutları, README. Supabase projesi `kararsizim` (eu-central-1): migration uygulandı, 13 tabloda RLS açık (doğrulandı), süper kullanıcı oluşturuldu.
+  - Bekleyen: Vercel deploy ve canlı doğrulama. Vercel'de `DATABASE_URL` (transaction pooler, `?sslmode=require`) ve `CSRF_TRUSTED_ORIGINS` (tam alan adı) güncellenip Redeploy edilecek. Sonra `*.vercel.app` üzerinde kayıt, giriş, anket oluşturma, oy verme, CSS/JS yüklenmesi kontrol edilecek.
+  - Kod incelemesinden açık kalanlar: çerezsiz tekrar oy ve hız sınırı yokluğu (oy, giriş, kayıt, admin), `Option` sorgusunda sıralama (`order_by("order", "id")`), yüzde yuvarlama, `vote.js` hata mesajı.
 
 ---
 

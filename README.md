@@ -53,14 +53,52 @@ Supabase yalnızca PostgreSQL olarak kullanılır; kimlik doğrulama Django'dad�
 1. Repoyu GitHub'a gönder.
 2. Vercel'de *Add New → Project* ile repoyu içe aktar. Vercel `manage.py` dosyasından Django'yu algılar,
    `WSGI_APPLICATION` giriş noktasını kullanır ve `collectstatic`'i build sırasında kendisi çalıştırır.
-3. *Environment Variables* bölümüne ekle (deploy'dan **önce**, çünkü Vercel build sırasında ayarları yükler):
-   `DJANGO_SECRET_KEY`, `DJANGO_DEBUG=False`, `DJANGO_ALLOWED_HOSTS`, `DATABASE_URL` (transaction pooler),
-   `CSRF_TRUSTED_ORIGINS`.
-4. Deploy et. Kontrol: `DJANGO_DEBUG=False python manage.py check --deploy`.
+   Python sürümü `.python-version` (3.12), fonksiyon bölgesi `vercel.json` (`fra1`, Supabase ile aynı bölge) ile belirlenir.
+3. *Environment Variables* bölümüne ekle, hepsi yalnızca **Production** için. Bunları deploy'dan **önce**
+   gir: Vercel build sırasında `manage.py` ile ayarları yükler, eksik `DJANGO_SECRET_KEY` build'i kırar.
+
+   | Değişken | Değer |
+   |---|---|
+   | `DJANGO_SECRET_KEY` | Rastgele anahtar (Secret olarak kaydet) |
+   | `DJANGO_DEBUG` | `False` |
+   | `DJANGO_ALLOWED_HOSTS` | `.vercel.app` (özel alan adı eklenirse onu da) |
+   | `CSRF_TRUSTED_ORIGINS` | `https://<proje-adi>.vercel.app` (joker `*` kullanma) |
+   | `DATABASE_URL` | Transaction pooler (port **6543**) + `?sslmode=require` (Secret olarak kaydet) |
+
+   `DJANGO_SECURE_SSL_REDIRECT` Vercel'de **ayarlanmaz** (varsayılan açık); yalnızca `DEBUG=False`'u lokalde
+   denerken `False` yapılır.
+
+   `DATABASE_URL` biçimi, tek satır ve tırnaksız:
+   ```
+   postgresql://postgres.<PROJE-REF>:<PAROLA>@<POOLER-HOST>:6543/postgres?sslmode=require
+   ```
+   Parolada köşeli parantez olmamalı; `@ # ? / : %` gibi karakterler URL kodlaması ister, en kolayı yalnızca
+   harf ve rakamdan oluşan bir parola kullanmaktır. Biçim hatalıysa build log'unda parolayı göstermeden
+   neyin yanlış olduğunu söyleyen bir `DATABASE_URL geçersiz ...` satırı çıkar.
+4. Deploy et. Ortam değişkenlerini sonradan değiştirirsen eski dağıtımlara uygulanmaz; **Redeploy** gerekir.
+5. Kontrol: `DJANGO_DEBUG=False python manage.py check --deploy` ve canlı adreste kayıt, giriş, anket
+   oluşturma, oy verme ve `/admin/`.
 
 Vercel kalıcı disk sunmaz; production'da SQLite kullanılmaz.
 
+### Örnek anketler
+
+Boş bir veritabanına 12 örnek anket ekler (ilk süper kullanıcıya ya da `--username` ile verilen kullanıcıya;
+tekrar çalıştırmak güvenlidir):
+
+```bash
+DATABASE_URL="<session-pooler-url>" python manage.py seed_polls
+```
+
+### Production'ı lokalde denemek
+
+`.env` içinde `DJANGO_DEBUG=False`, `DJANGO_SECRET_KEY=<anahtar>` ve `DJANGO_SECURE_SSL_REDIRECT=False` ayarla,
+önce `python manage.py collectstatic --noinput` çalıştır, sonra `python manage.py runserver --noreload`.
+`DEBUG=False` iken `DJANGO_SECRET_KEY` zorunludur.
+
 ## Bilinen prototip sınırları
 
-- Üyesiz oy, imzalı çereze bağlıdır; çerezi silen biri tekrar oy verebilir.
+- Üyesiz oy, imzalı çereze bağlıdır; çerezi silen ya da hiç göndermeyen biri tekrar oy verebilir ve oy
+  gönderimine hız sınırı yoktur. Giriş, kayıt ve `/admin/` için de uygulama içi hız sınırı ve e-posta
+  doğrulaması yoktur; yayında Vercel Firewall'da bu adreslere hız sınırı kuralı eklenmesi önerilir.
 - Oy değiştirme, anket kapatma, arama, yorum, parola sıfırlama henüz yok.
